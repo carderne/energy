@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Energy</title>
+        <script src="vendor/chart.min.js"></script>
+        <script src="vendor/moment.js"></script>
+        <script src="vendor/chartjs-adapter-moment.js"></script>
+        <link href="./tw.css" rel="stylesheet" />
+        <style>
+td,th {
+    padding: 0.2em 1em;
+}
+        </style>
+    </head>
+    <body class="w-screen h-screen">
+
+        <div class="flex flex-row">
+            <div class="m-4 w-60">
+                <input class="w-full shadow border rounded py-2 px-3 text-gray-700" id="key" type="text" placeholder="key">
+            </div>
+            <div class="m-4 w-60">
+                <input class="w-full shadow border rounded py-2 px-3 text-gray-700" id="mpan" type="text" placeholder="mpan">
+            </div>
+            <div class="m-4 w-60">
+                <input class="w-full shadow border rounded py-2 px-3 text-gray-700" id="serial" type="text" placeholder="serial">
+            </div>
+            <div class="m-4 ml-4">
+                <button id="btn" class="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded" type="button">
+                    Load
+                </button>
+            </div>
+        </div>
+
+        <div style="height: 600px; width: 1200px;">
+            <canvas id="chart"></canvas>
+        </div>
+
+        <table id="daily">
+            <tr>
+                <th>Day</th>
+                <th>Usage</th>
+            </tr>
+        </table>
+
+        <script type="module" src="./main.js"></script>
+    </body>
+</html>
