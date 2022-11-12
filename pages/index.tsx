@@ -3,15 +3,23 @@ import Head from "next/head";
 
 import LineChart from "../components/chart";
 import Table from "../components/table";
+import Input from "../components/input";
 
-const fetchOptions = (key: string) => ({
+const fetchOptions = (apikey: string) => ({
   method: "GET",
   headers: {
-    Authorization: `Basic ${btoa(key)}:`,
+    Authorization: `Basic ${btoa(apikey)}:`,
   },
 });
 
-const load = async (key: string, mpan: string, serial: string) => {
+interface Acc {
+  id: number;
+  apikey: string;
+  mpan: string;
+  serial: string;
+}
+
+const load = async ({ apikey, mpan, serial }: Acc) => {
   const urlBase = "https://api.octopus.energy/v1";
   const urlCons = new URL(
     `${urlBase}/electricity-meter-points/${mpan}/meters/${serial}/consumption`
@@ -24,16 +32,19 @@ const load = async (key: string, mpan: string, serial: string) => {
   urlCons.searchParams.append("period_from", weekAgo.toISOString());
   urlCons.searchParams.append("period_to", today.toISOString());
   urlCons.searchParams.append("order_by", "period");
-  const cons = await (await fetch(urlCons, fetchOptions(key))).json();
+  try {
+    const cons = await (await fetch(urlCons, fetchOptions(apikey))).json();
 
-  urlCons.searchParams.append("group_by", "day");
-  const daily = await (await fetch(urlCons, fetchOptions(key))).json();
-
-  return [cons, daily];
+    urlCons.searchParams.append("group_by", "day");
+    const daily = await (await fetch(urlCons, fetchOptions(apikey))).json();
+    return [cons, daily];
+  } catch (error) {
+    return [{ results: [] }, { results: [] }];
+  }
 };
 
-const setCookies = (key: string, mpan: string, serial: string) => {
-  document.cookie = `key=${key};max-age=31536000;samesite=lax`;
+const setCookies = ({ apikey, mpan, serial }: Acc) => {
+  document.cookie = `apikey=${apikey};max-age=31536000;samesite=lax`;
   document.cookie = `mpan=${mpan};max-age=31536000;samesite=lax`;
   document.cookie = `serial=${serial};max-age=31536000;samesite=lax`;
 };
@@ -46,86 +57,76 @@ const getCookie = (name: string): string => {
 };
 
 export default function Home() {
-  const [key, setKey] = useState("");
-  const [mpan, setMpan] = useState("");
-  const [serial, setSerial] = useState("");
+  const [accs, setAccs] = useState([
+    { id: 0, apikey: "", mpan: "", serial: "" },
+  ]);
 
   const [consData, setConsData] = useState([]);
   const [dailyData, setDailyData] = useState([]);
 
+  const addRow = () => {
+    setAccs((prev) => [...prev, { id: 1, apikey: "", mpan: "", serial: "" }]);
+  };
+
   useEffect(() => {
-    const key = getCookie("key");
+    const apikey = getCookie("apikey");
     const mpan = getCookie("mpan");
     const serial = getCookie("serial");
     (async () => {
-      const [cons, daily] = await load(key, mpan, serial);
+      const [cons, daily] = await load({ id: 0, apikey, mpan, serial });
       setConsData(cons.results);
       setDailyData(daily.results);
     })().catch(console.error);
-    setKey(key);
-    setMpan(mpan);
-    setSerial(serial);
+    setAccs([{ id: 0, apikey, mpan, serial }]);
   }, []);
+
   const handleClick = async () => {
-    const [cons, daily] = await load(key, mpan, serial);
+    const [cons, daily] = await load(accs[0]);
     setConsData(cons.results);
     setDailyData(daily.results);
-    setCookies(key, mpan, serial);
+    setCookies(accs[0]);
   };
+
   return (
     <div>
       <Head>
         <title>Smart Meter</title>
         <meta name="description" content="Smart meter" />
       </Head>
-      <div>
-        <div className="flex flex-row">
-          <div className="m-4 w-60">
-            <input
-              className="w-full shadow border rounded py-2 px-3 text-gray-700"
-              id="key"
-              type="text"
-              placeholder="key"
-              value={key}
-              onChange={(e) => setKey(e.target.value)}
-            />
-          </div>
-          <div className="m-4 w-60">
-            <input
-              className="w-full shadow border rounded py-2 px-3 text-gray-700"
-              id="mpan"
-              type="text"
-              placeholder="mpan"
-              value={mpan}
-              onChange={(e) => setMpan(e.target.value)}
-            />
-          </div>
-          <div className="m-4 w-60">
-            <input
-              className="w-full shadow border rounded py-2 px-3 text-gray-700"
-              id="serial"
-              type="text"
-              placeholder="serial"
-              value={serial}
-              onChange={(e) => setSerial(e.target.value)}
-            />
-          </div>
-          <div className="m-4 ml-4">
-            <button
-              id="btn"
-              className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-              type="button"
-              onClick={handleClick}
-            >
-              Load
-            </button>
-          </div>
+      <div className="flex flex-row">
+        <div className="m-4 ml-4">
+          <button
+            id="btn"
+            className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            type="button"
+            onClick={handleClick}
+          >
+            Load
+          </button>
         </div>
-
+        <div className="m-4 ml-4">
+          <button
+            id="btn"
+            className="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+            type="button"
+            onClick={addRow}
+          >
+            +
+          </button>
+        </div>
+      </div>
+      <div>
+        {accs.map((acc, i: number) => (
+          <div key={i}>
+            <Input acc={acc} setAccs={setAccs} />
+          </div>
+        ))}
+      </div>
+      <div>
         <div className="h-[600px] w-[1200px]">
           <LineChart data={consData} />
         </div>
-          <Table data={dailyData} />
+        <Table data={dailyData} />
       </div>
     </div>
   );

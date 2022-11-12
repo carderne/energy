@@ -1,9 +1,13 @@
-interface dailyData {
+interface DailyData {
   interval_start: string;
   consumption: string;
 }
 
-export default function Table({ data = [] }: { data: dailyData[] }) {
+interface Props {
+  data: DailyData[];
+}
+
+export default function Table({ data = [] }: Props) {
   return (
     <table className="table-auto">
       <thead>
