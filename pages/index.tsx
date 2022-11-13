@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import Head from "next/head";
 
+import { Acc, Cons, Daily } from "../types/types";
 import LineChart from "../components/chart";
 import Table from "../components/table";
 import Input from "../components/input";
@@ -12,41 +13,54 @@ const fetchOptions = (apikey: string) => ({
   },
 });
 
-interface Acc {
-  id: number;
-  apikey: string;
-  mpan: string;
-  serial: string;
-}
-
-const load = async ({ apikey, mpan, serial }: Acc) => {
+const load = async (accs: Acc[]): Promise<[Cons, Daily][]> => {
   const urlBase = "https://api.octopus.energy/v1";
-  const urlCons = new URL(
-    `${urlBase}/electricity-meter-points/${mpan}/meters/${serial}/consumption`
-  );
-  urlCons.searchParams.append("page_size", "2500");
-  const today = new Date();
-  const weekAgo = new Date();
-  weekAgo.setDate(weekAgo.getDate() - 7);
-  weekAgo.setUTCHours(0, 0, 0, 0);
-  urlCons.searchParams.append("period_from", weekAgo.toISOString());
-  urlCons.searchParams.append("period_to", today.toISOString());
-  urlCons.searchParams.append("order_by", "period");
-  try {
-    const cons = await (await fetch(urlCons, fetchOptions(apikey))).json();
 
-    urlCons.searchParams.append("group_by", "day");
-    const daily = await (await fetch(urlCons, fetchOptions(apikey))).json();
-    return [cons, daily];
-  } catch (error) {
-    return [{ results: [] }, { results: [] }];
-  }
+  const results = await Promise.all(
+    accs.map(async (acc: Acc): Promise<[Cons, Daily]> => {
+      const { mpan, serial, apikey } = acc;
+      const urlCons = new URL(
+        `${urlBase}/electricity-meter-points/${mpan}/meters/${serial}/consumption`
+      );
+      urlCons.searchParams.append("page_size", "2500");
+      const today = new Date();
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      weekAgo.setUTCHours(0, 0, 0, 0);
+      urlCons.searchParams.append("period_from", weekAgo.toISOString());
+      urlCons.searchParams.append("period_to", today.toISOString());
+      urlCons.searchParams.append("order_by", "period");
+      try {
+        const cons = await (await fetch(urlCons, fetchOptions(apikey))).json();
+        urlCons.searchParams.append("group_by", "day");
+        const daily = await (await fetch(urlCons, fetchOptions(apikey))).json();
+        return [
+          { label: acc.label, data: cons.results },
+          { label: acc.label, data: daily.results },
+        ];
+      } catch (error) {
+        return [
+          { label: "err", data: [] },
+          { label: "err", data: [] },
+        ];
+      }
+    })
+  );
+  const resultsFilt: [Cons, Daily][] = results.filter(
+    (r) => r[0].label !== "err" && r[0].data !== undefined
+  );
+
+  return resultsFilt;
 };
 
-const setCookies = ({ apikey, mpan, serial }: Acc) => {
-  document.cookie = `apikey=${apikey};max-age=31536000;samesite=lax`;
-  document.cookie = `mpan=${mpan};max-age=31536000;samesite=lax`;
-  document.cookie = `serial=${serial};max-age=31536000;samesite=lax`;
+const setCookies = (accs: Acc[]): void => {
+  document.cookie = `numAccs=${accs.length};max-age=31536000;samesite=lax`;
+  accs.forEach((acc, i) => {
+    document.cookie = `label_${i}=${acc.label};max-age=31536000;samesite=lax`;
+    document.cookie = `mpan_${i}=${acc.mpan};max-age=31536000;samesite=lax`;
+    document.cookie = `serial_${i}=${acc.serial};max-age=31536000;samesite=lax`;
+    document.cookie = `apikey_${i}=${acc.apikey};max-age=31536000;samesite=lax`;
+  });
 };
 
 const getCookie = (name: string): string => {
@@ -56,35 +70,49 @@ const getCookie = (name: string): string => {
   return "";
 };
 
+const getAccsFromCookies = (): Acc[] => {
+  const numAccs = parseInt(getCookie("numAccs")) || 0;
+  return Array.from(Array(numAccs).keys()).map((i) => {
+    const label = getCookie(`label_${i}`);
+    const mpan = getCookie(`mpan_${i}`);
+    const serial = getCookie(`serial_${i}`);
+    const apikey = getCookie(`apikey_${i}`);
+    return {label, mpan, serial, apikey};
+  });
+};
+
 export default function Home() {
-  const [accs, setAccs] = useState([
-    { id: 0, apikey: "", mpan: "", serial: "" },
-  ]);
+  const [accs, setAccs] = useState<Acc[]>([]);
+  const [adding, setAdding] = useState(false);
 
-  const [consData, setConsData] = useState([]);
-  const [dailyData, setDailyData] = useState([]);
-
-  const addRow = () => {
-    setAccs((prev) => [...prev, { id: 1, apikey: "", mpan: "", serial: "" }]);
-  };
+  const [consData, setConsData] = useState<Cons[]>([]);
+  const [dailyData, setDailyData] = useState<Daily[]>([]);
 
   useEffect(() => {
-    const apikey = getCookie("apikey");
-    const mpan = getCookie("mpan");
-    const serial = getCookie("serial");
+    const accs = getAccsFromCookies();
     (async () => {
-      const [cons, daily] = await load({ id: 0, apikey, mpan, serial });
-      setConsData(cons.results);
-      setDailyData(daily.results);
+      const loadResults = await load(accs);
+      setConsData(loadResults.map((lr) => lr[0]));
+      setDailyData(loadResults.map((lr) => lr[1]));
     })().catch(console.error);
-    setAccs([{ id: 0, apikey, mpan, serial }]);
+    setAccs(accs);
   }, []);
 
   const handleClick = async () => {
-    const [cons, daily] = await load(accs[0]);
-    setConsData(cons.results);
-    setDailyData(daily.results);
-    setCookies(accs[0]);
+    const loadResults = await load(accs);
+    setConsData(loadResults.map((lr) => lr[0]));
+    setDailyData(loadResults.map((lr) => lr[1]));
+    const goodAccLabels = loadResults.map((lr) => lr[0].label);
+    setCookies(accs.filter((acc) => goodAccLabels.includes(acc.label)));
+  };
+
+  const addAcc = (acc: Acc) => {
+    setAccs((prev) => [...prev, acc]);
+    setAdding(false);
+  };
+
+  const deleteAcc = (acc: Acc) => {
+    setAccs((prev) => prev.filter((a) => a.mpan !== acc.mpan));
   };
 
   return (
@@ -93,10 +121,24 @@ export default function Home() {
         <title>Smart Meter</title>
         <meta name="description" content="Smart meter" />
       </Head>
+      <div className="py-2">
+        {accs.map((acc) => (
+          <div key={acc.mpan} className="flex flex-row p-2">
+            <div>{acc.label}:</div>
+            <div className="px-4">{acc.mpan}</div>
+            <button
+              className="w-10 bg-red-500 hover:bg-red-700 text-white rounded"
+              type="button"
+              onClick={() => deleteAcc(acc)}
+            >
+              X
+            </button>
+          </div>
+        ))}
+      </div>
       <div className="flex flex-row">
         <div className="m-4 ml-4">
           <button
-            id="btn"
             className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
             type="button"
             onClick={handleClick}
@@ -106,27 +148,18 @@ export default function Home() {
         </div>
         <div className="m-4 ml-4">
           <button
-            id="btn"
             className="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
             type="button"
-            onClick={addRow}
+            onClick={() => setAdding(!adding)}
           >
-            +
+            Add account
           </button>
         </div>
       </div>
+      <div>{adding && <Input addAcc={addAcc} />}</div>
       <div>
-        {accs.map((acc, i: number) => (
-          <div key={i}>
-            <Input acc={acc} setAccs={setAccs} />
-          </div>
-        ))}
-      </div>
-      <div>
-        <div className="h-[600px] w-[1200px]">
-          <LineChart data={consData} />
-        </div>
-        <Table data={dailyData} />
+        <LineChart consData={consData} />
+        <Table dailyData={dailyData} />
       </div>
     </div>
   );

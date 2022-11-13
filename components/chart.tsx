@@ -23,12 +23,9 @@ ChartJS.register(
   Legend
 );
 
+import { Cons } from "../types/types";
+
 const options: any = {
-  plugins: {
-    legend: {
-      display: false,
-    },
-  },
   scales: {
     x: {
       type: "time",
@@ -61,28 +58,29 @@ const options: any = {
   maintainAspectRatio: false,
 };
 
-interface lineData {
-  interval_end: number;
-  consumption: number;
+const colors = ["#1b9e77", "#d95f02", "#7570b3", "#e7298a"];
+
+interface Props {
+  consData: Cons[];
 }
 
-export default function LineChart({ data = [] }: { data: lineData[] }) {
+export default function LineChart({ consData }: Props) {
   const chartData: ChartData<"line"> = {
-    datasets: [
-      {
-        data: data.map((d) => ({
-          x: d.interval_end,
-          y: d.consumption,
-        })),
-        label: "consumption",
-        borderColor: "rgba(151, 189, 61, 1)",
-        fill: true,
-        borderWidth: 2,
-        backgroundColor: "rgba(151, 189, 61, 0.15)",
-        borderCapStyle: "round",
-        pointBorderWidth: 1,
-      },
-    ],
+    datasets: consData.map((cd, i) => ({
+      data: cd.data.map((d) => ({
+        x: d.interval_end,
+        y: d.consumption,
+      })),
+      label: cd.label,
+      borderColor: colors[i],
+      borderWidth: 2,
+      borderCapStyle: "round",
+      pointBorderWidth: 1,
+    })),
   };
-  return <Line options={options} data={chartData} />;
+  return (
+    <div className="h-[600px] w-[1200px]">
+      <Line options={options} data={chartData} />
+    </div>
+  );
 }
