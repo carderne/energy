@@ -13,7 +13,7 @@ const fetchOptions = (apikey: string) => ({
   },
 });
 
-const load = async (accs: Acc[]): Promise<[Cons, Daily][]> => {
+const load = async (accs: Acc[], startDate: Date, endDate: Date): Promise<[Cons, Daily][]> => {
   const urlBase = "https://api.octopus.energy/v1";
 
   const results = await Promise.all(
@@ -23,12 +23,8 @@ const load = async (accs: Acc[]): Promise<[Cons, Daily][]> => {
         `${urlBase}/electricity-meter-points/${mpan}/meters/${serial}/consumption`
       );
       urlCons.searchParams.append("page_size", "2500");
-      const today = new Date();
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      weekAgo.setUTCHours(0, 0, 0, 0);
-      urlCons.searchParams.append("period_from", weekAgo.toISOString());
-      urlCons.searchParams.append("period_to", today.toISOString());
+      urlCons.searchParams.append("period_from", startDate.toISOString());
+      urlCons.searchParams.append("period_to", endDate.toISOString());
       urlCons.searchParams.append("order_by", "period");
       try {
         const cons = await (await fetch(urlCons, fetchOptions(apikey))).json();
@@ -77,7 +73,7 @@ const getAccsFromCookies = (): Acc[] => {
     const mpan = getCookie(`mpan_${i}`);
     const serial = getCookie(`serial_${i}`);
     const apikey = getCookie(`apikey_${i}`);
-    return {label, mpan, serial, apikey};
+    return { label, mpan, serial, apikey };
   });
 };
 
@@ -88,10 +84,17 @@ export default function Home() {
   const [consData, setConsData] = useState<Cons[]>([]);
   const [dailyData, setDailyData] = useState<Daily[]>([]);
 
+  const weekAgo = new Date();
+  weekAgo.setDate(weekAgo.getDate() - 7);
+  weekAgo.setUTCHours(0, 0, 0, 0);
+  const today = new Date();
+  const [startDate, setStartDate] = useState(weekAgo);
+  const [endDate, setEndDate] = useState(today);
+
   useEffect(() => {
     const accs = getAccsFromCookies();
     (async () => {
-      const loadResults = await load(accs);
+      const loadResults = await load(accs, startDate, endDate);
       setConsData(loadResults.map((lr) => lr[0]));
       setDailyData(loadResults.map((lr) => lr[1]));
     })().catch(console.error);
@@ -99,7 +102,7 @@ export default function Home() {
   }, []);
 
   const handleClick = async () => {
-    const loadResults = await load(accs);
+    const loadResults = await load(accs, startDate, endDate);
     setConsData(loadResults.map((lr) => lr[0]));
     setDailyData(loadResults.map((lr) => lr[1]));
     const goodAccLabels = loadResults.map((lr) => lr[0].label);
@@ -139,15 +142,6 @@ export default function Home() {
       <div className="flex flex-row">
         <div className="m-4 ml-4">
           <button
-            className="w-full bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
-            type="button"
-            onClick={handleClick}
-          >
-            Load
-          </button>
-        </div>
-        <div className="m-4 ml-4">
-          <button
             className="w-full bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
             type="button"
             onClick={() => setAdding(!adding)}
@@ -157,6 +151,33 @@ export default function Home() {
         </div>
       </div>
       <div>{adding && <Input addAcc={addAcc} />}</div>
+      <div>
+        From:
+        <input
+          type="date"
+          name="start"
+          className="mx-4 bg-blue-200"
+          value={startDate.toISOString().slice(0, 10)}
+          onChange={(e) => setStartDate(new Date(e.target.value))}
+        />
+        To:
+        <input
+          type="date"
+          name="start"
+          className="mx-4 bg-blue-200"
+          value={endDate.toISOString().slice(0, 10)}
+          onChange={(e) => setEndDate(new Date(e.target.value))}
+        />
+      </div>
+      <div className="m-4 ml-4">
+        <button
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          type="button"
+          onClick={handleClick}
+        >
+          Load
+        </button>
+      </div>
       <div>
         <LineChart consData={consData} />
         <Table dailyData={dailyData} />

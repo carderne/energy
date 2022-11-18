@@ -1,5 +1,7 @@
 # custom
 secrets.txt
+*.ipynb
+.ipynb_checkpoints/
 
 # dependencies
 /node_modules
